@@ -1,4 +1,4 @@
-module github.com/matthewoestreich/workerpoolxt/
+module github.com/matthewoestreich/workerpoolxt
 
 go 1.23
 
