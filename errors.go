@@ -1,6 +1,6 @@
 package workerpoolxt
 
-// JobPanicError is what gets thrown during panic recovery
+// JobPanicError is what gets thrown during job panic recovery
 type JobPanicError struct {
     Job Job
     Message string

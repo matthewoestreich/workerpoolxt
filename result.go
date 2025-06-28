@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-// Result is a resut
+// Result is a Job resut
 type Result struct {
 	Error    error
 	Data     any
@@ -12,8 +12,8 @@ type Result struct {
 	duration time.Duration
 }
 
-// Duration does a thing
+// Duration tells you how long a Job ran for
 func (r *Result) Duration() time.Duration { return r.duration }
 
-// Name does a thing
+// Name is the Job name
 func (r *Result) Name() string { return r.name }

@@ -26,7 +26,7 @@ func New(size int) *WorkerpoolXT {
 	}
 }
 
-// SubmitXT does a thing
+// SubmitXT submits a Job to workerpool
 func (xt *WorkerpoolXT) SubmitXT(job Job) error {
 	if job.Function == nil {
 		return errors.New("job.Function is nil")
@@ -53,7 +53,7 @@ func (xt *WorkerpoolXT) SubmitXT(job Job) error {
 	return nil
 }
 
-// StopWaitXT does a thing
+// StopWaitXT blocks main thread and waits for all jobs
 func (xt *WorkerpoolXT) StopWaitXT() []Result {
 	xt.once.Do(func() {
 		xt.StopWait()
