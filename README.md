@@ -56,17 +56,17 @@ Works with timeouts, cancelled context, etc..
 The point is: you have full control over every job.
 
 ```go
-Job{
+wpxt.Job{
   Name: "Job using context",
-  Function: func() Result {
+  Function: func() wpxt.Result {
     timeout := 10 * time.Second
     ctx, cancel := context.WithTimeout(context.Background(), timeout)
     defer cancel()
     result, err := LongRunningTaskWithContext(ctx)
     if err != nil {
-    	return Result{Error: err}
+    	return wpxt.Result{Error: err}
     }
-    return Result{Data: result}
+    return wpxt.Result{Data: result}
   },
 }
 ```
@@ -78,9 +78,9 @@ You can use something like [backoff](https://github.com/cenkalti/backoff) for th
 The point is: you have full control over every job.
 
 ```go
-Job{
+wpxt.Job{
   Name: "Job using retry",
-  Function: func() Result {
+  Function: func() wpxt.Result {
     work := func() (string, error) {
       if /* Some result is an error */ {
         return "", theError
@@ -90,9 +90,9 @@ Job{
     expBackoff := backoff.WithBackOff(backoff.NewExponentialBackOff())
     result, err := backoff.Retry(ctx, work, expBackoff)
     if err != nil {
-    	return Result{Error: err}
+    	return wpxt.Result{Error: err}
     }
-    return Result{Data: result}
+    return wpxt.Result{Data: result}
   },
 }
 ```
