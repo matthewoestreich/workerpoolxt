@@ -14,13 +14,11 @@ jobs:
       - name: Install dependencies
         run: |
           go version
-          go get -u golang.org/x/lint/golint
       - name: Run build
         run: go build .
-      - name: Run vet & lint
+      - name: Run vet
         run: |
           go vet .
-          golint .
       - name: Checkout
         uses: actions/checkout@v2
         id: "test"
