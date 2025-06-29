@@ -3,7 +3,7 @@ package workerpoolxt
 import (
 	"context"
 	"errors"
-	"fmt"
+	//"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -56,11 +56,11 @@ func TestHelloWorldFromREADME(t *testing.T) {
 	wp.SubmitXT(helloWorldJob)
 
 	// Block main thread until all jobs are done.
-	allJobResults := wp.StopWaitXT()
+	wp.StopWaitXT()
 
-	for _, r := range allJobResults {
-		fmt.Printf("%+v", r)
-	}
+	//for _, r := range allJobResults {
+	//	fmt.Printf("%+v", r)
+	//}
 }
 
 func TestBasics(t *testing.T) {
@@ -215,7 +215,10 @@ func TestStopWait(t *testing.T) {
 		},
 	})
 
-	resultsBeforeStop := wp.results
+	wp.resultsMutex.Lock()
+	resultsBeforeStop := make([]Result, len(wp.results))
+	copy(resultsBeforeStop, wp.results)
+	wp.resultsMutex.Unlock()
 	wp.StopWaitXT()
 
 	mu.Lock()
@@ -364,7 +367,8 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 		},
 	})
 
-	firstResults := wp.StopWaitXT()
+	/*firstResults :=*/
+	wp.StopWaitXT()
 
 	wp.SubmitXT(Job{
 		Name: "after",
@@ -373,10 +377,10 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 		},
 	})
 
-	secondResults := wp.StopWaitXT()
-
-	fmt.Println("firstResults ", firstResults)
-	fmt.Println("secondResults", secondResults)
+	/*secondResults :=*/
+	wp.StopWaitXT()
+	//fmt.Println("firstResults ", firstResults)
+	//fmt.Println("secondResults", secondResults)
 }
 
 func TestNilFunctionInJob(t *testing.T) {
@@ -385,6 +389,6 @@ func TestNilFunctionInJob(t *testing.T) {
 		Name:     "nil func",
 		Function: nil,
 	})
-	res := wp.StopWaitXT()
-	fmt.Println("res", res)
+	/*res :=*/ wp.StopWaitXT()
+	//fmt.Println("res", res)
 }

@@ -10,15 +10,15 @@ import (
 )
 
 // New creates a new workerpoolxt
-func New(size int) *WorkerpoolXT {
-	return &WorkerpoolXT{
+func New(size int) *WorkerPoolXT {
+	return &WorkerPoolXT{
 		WorkerPool: workerpool.New(size),
 		results:    []Result{},
 	}
 }
 
-// WorkerpoolXT wraps workerpool
-type WorkerpoolXT struct {
+// WorkerPoolXT wraps workerpool
+type WorkerPoolXT struct {
 	*workerpool.WorkerPool
 	resultsMutex sync.Mutex
 	results      []Result
@@ -28,50 +28,70 @@ type WorkerpoolXT struct {
 // Results gets results, if any exist.
 // You should call |.StopWait()| first.
 // Preferrably you should use |allResult := .StopWaitXT()|
-func (xt *WorkerpoolXT) Results() []Result {
-	return xt.results
+func (wp *WorkerPoolXT) Results() []Result {
+	return wp.results
 }
 
 // SubmitXT submits a Job to workerpool
-func (xt *WorkerpoolXT) SubmitXT(job Job) (err error) {
+func (wp *WorkerPoolXT) SubmitXT(job Job) error {
 	if job.Function == nil {
 		return errors.New("job.Function is nil")
 	}
 
-	// If you try to submit a job on already closed channel.
-	// eg. after calling |.StopWait()| or |.StopWaitXT()|
-	defer recoverFromSubmitXTPanic(xt, job)
+	submitErr := wp.trySubmit(func() {
+		defer recoverFromJobPanic(wp, job)
 
-	xt.Submit(func() {
-		resultChan := make(chan Result, 1)
+		job.startedAt = time.Now()
+		data, err := job.Function()
+		duration := time.Since(job.startedAt)
 
-		go func() {
-			defer recoverFromJobPanic(job, resultChan)
-			job.startedAt = time.Now()
-			data, error := job.Function()
-			resultChan <- Result{
-				Name:     job.Name,
-				Error:    error,
-				Duration: time.Since(job.startedAt),
-				Data:     data,
-			}
-		}()
-
-		res := <-resultChan
-		xt.resultsMutex.Lock()
-		xt.results = append(xt.results, res)
-		xt.resultsMutex.Unlock()
+		wp.appendResult(Result{
+			Name:     job.Name,
+			Error:    err,
+			Duration: duration,
+			Data:     data,
+		})
 	})
 
-	return err
+	if submitErr != nil {
+		wp.appendResult(Result{
+			Name: job.Name,
+			Error: PanicRecoveryError{
+				Job:     job,
+				Message: fmt.Sprintf("failure during job submission: %v", submitErr),
+			},
+			Duration: 0,
+			Data:     nil,
+		})
+	}
+
+	return nil
 }
 
 // StopWaitXT blocks main thread and waits for all jobs
-func (xt *WorkerpoolXT) StopWaitXT() []Result {
-	xt.once.Do(func() {
-		xt.StopWait()
+func (wp *WorkerPoolXT) StopWaitXT() []Result {
+	wp.once.Do(func() {
+		wp.StopWait()
 	})
-	return xt.results
+	return wp.results
+}
+
+// Gives us an error if there is a panic during job submission.
+func (wp *WorkerPoolXT) trySubmit(fn func()) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic during submit: %v", r)
+		}
+	}()
+	wp.Submit(fn)
+	return nil
+}
+
+// Handles locking/unlocking mutex while appending result to results.
+func (wp *WorkerPoolXT) appendResult(result Result) {
+	wp.resultsMutex.Lock()
+	wp.results = append(wp.results, result)
+	wp.resultsMutex.Unlock()
 }
 
 // Result is a Job resut
@@ -105,29 +125,16 @@ func (e PanicRecoveryError) Error() string {
 }
 
 // Helper function to recover from a panic within a job
-func recoverFromJobPanic(j Job, rc chan<- Result) {
+func recoverFromJobPanic(wp *WorkerPoolXT, j Job) {
 	if r := recover(); r != nil {
-		rc <- Result{
-			Error:    PanicRecoveryError{Message: fmt.Sprintf("Job \"%s\" recovered from panic \"%v\"", j.Name, r)},
-			Name:     j.Name,
-			Duration: time.Since(j.startedAt),
-		}
-	}
-}
-
-func recoverFromSubmitXTPanic(xt *WorkerpoolXT, job Job) {
-	if r := recover(); r != nil {
-		xt.resultsMutex.Lock()
-		defer xt.resultsMutex.Unlock()
-
-		xt.results = append(xt.results, Result{
-			Name: job.Name,
+		wp.appendResult(Result{
+			Name: j.Name,
 			Error: PanicRecoveryError{
-				Job:     job,
-				Message: fmt.Sprintf("workerpool.Submit panicked: %v", r),
+				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
+				Job:     j,
 			},
-			Duration: 0, // could be 0 since job never ran
 			Data:     nil,
+			Duration: time.Since(j.startedAt),
 		})
 	}
 }

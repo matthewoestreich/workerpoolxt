@@ -10,15 +10,15 @@ import (
 )
 
 // New creates a new workerpoolxt
-func New[T any](size int) *WorkerpoolXT[T] {
-	return &WorkerpoolXT[T]{
+func New[T any](size int) *WorkerPoolXT[T] {
+	return &WorkerPoolXT[T]{
 		WorkerPool: workerpool.New(size),
 		results:    []Result[T]{},
 	}
 }
 
-// WorkerpoolXT wraps workerpool
-type WorkerpoolXT[T any] struct {
+// WorkerPoolXT wraps workerpool
+type WorkerPoolXT[T any] struct {
 	*workerpool.WorkerPool
 	resultsMutex sync.Mutex
 	results      []Result[T]
@@ -28,50 +28,70 @@ type WorkerpoolXT[T any] struct {
 // Results gets results, if any exist.
 // You should call |.StopWait()| first.
 // Preferrably you should use |allResult := .StopWaitXT()|
-func (wp *WorkerpoolXT[T]) Results() []Result[T] {
+func (wp *WorkerPoolXT[T]) Results() []Result[T] {
 	return wp.results
 }
 
 // SubmitXT submits a Job to workerpool
-func (wp *WorkerpoolXT[T]) SubmitXT(job Job[T]) (err error) {
+func (wp *WorkerPoolXT[T]) SubmitXT(job Job[T]) error {
 	if job.Function == nil {
 		return errors.New("job.Function is nil")
 	}
 
-	// If you try to submit a job on already closed channel.
-	// eg. after calling |.StopWait()| or |.StopWaitXT()|
-	defer recoverFromSubmitXTPanic(wp, job)
+	submitErr := wp.trySubmit(func() {
+		defer recoverFromJobPanic(wp, job)
 
-	wp.Submit(func() {
-		resultChan := make(chan Result[T], 1)
+		job.startedAt = time.Now()
+		data, err := job.Function()
+		duration := time.Since(job.startedAt)
 
-		go func() {
-			defer recoverFromJobPanic(job, resultChan)
-			job.startedAt = time.Now()
-			data, error := job.Function()
-			resultChan <- Result[T]{
-				Name:     job.Name,
-				Error:    error,
-				Duration: time.Since(job.startedAt),
-				Data:     data,
-			}
-		}()
-
-		res := <-resultChan
-		wp.resultsMutex.Lock()
-		wp.results = append(wp.results, res)
-		wp.resultsMutex.Unlock()
+		wp.appendResult(Result[T]{
+			Name:     job.Name,
+			Error:    err,
+			Duration: duration,
+			Data:     data,
+		})
 	})
 
-	return err
+	if submitErr != nil {
+		wp.appendResult(Result[T]{
+			Name: job.Name,
+			Error: PanicRecoveryError[T]{
+				Job:     job,
+				Message: fmt.Sprintf("failure during job submission: %v", submitErr),
+			},
+			Duration: 0,
+			Data:     *new(T),
+		})
+	}
+
+	return nil
 }
 
 // StopWaitXT blocks main thread and waits for all jobs
-func (wp *WorkerpoolXT[T]) StopWaitXT() []Result[T] {
+func (wp *WorkerPoolXT[T]) StopWaitXT() []Result[T] {
 	wp.once.Do(func() {
 		wp.StopWait()
 	})
 	return wp.results
+}
+
+// Gives us an error if there is a panic during job submission.
+func (wp *WorkerPoolXT[T]) trySubmit(fn func()) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic during submit: %v", r)
+		}
+	}()
+	wp.Submit(fn)
+	return nil
+}
+
+// Handles locking/unlocking mutex while appending result to results.
+func (wp *WorkerPoolXT[T]) appendResult(result Result[T]) {
+	wp.resultsMutex.Lock()
+	wp.results = append(wp.results, result)
+	wp.resultsMutex.Unlock()
 }
 
 // Result is a Job resut
@@ -105,30 +125,16 @@ func (e PanicRecoveryError[T]) Error() string {
 }
 
 // Helper function to recover from a panic within a job
-func recoverFromJobPanic[T any](j Job[T], rc chan<- Result[T]) {
+func recoverFromJobPanic[T any](wp *WorkerPoolXT[T], j Job[T]) {
 	if r := recover(); r != nil {
-		rc <- Result[T]{
-			Error:    PanicRecoveryError[T]{Message: fmt.Sprintf("Job \"%s\" recovered from panic \"%v\"", j.Name, r)},
-			Name:     j.Name,
-			Duration: time.Since(j.startedAt),
-		}
-	}
-}
-
-func recoverFromSubmitXTPanic[T any](xt *WorkerpoolXT[T], job Job[T]) {
-	if r := recover(); r != nil {
-		xt.resultsMutex.Lock()
-		defer xt.resultsMutex.Unlock()
-
-		xt.results = append(xt.results, Result[T]{
-			Name: job.Name,
+		wp.appendResult(Result[T]{
+			Name: j.Name,
 			Error: PanicRecoveryError[T]{
-				Job:     job,
-				Message: fmt.Sprintf("workerpool.Submit panicked: %v", r),
+				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
+				Job:     j,
 			},
-			Duration: 0, // could be 0 since job never ran
 			Data:     *new(T),
-			// ^^^^^^^ WHY CAN'T I USE nil HERE?
+			Duration: time.Since(j.startedAt),
 		})
 	}
 }

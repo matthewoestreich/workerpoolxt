@@ -3,7 +3,7 @@ package generic
 import (
 	"context"
 	"errors"
-	"fmt"
+	//"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -123,12 +123,12 @@ func TestCodeFromREADME(t *testing.T) {
 	for _, result := range results {
 		if result.Data.Some != nil {
 			// Most likely a job that returned 'SomeJob' type.
-			isSuccess := result.Data.Some.Success
-			message := result.Data.Some.Message
-			jobName := result.Name
-			jobDuration := result.Duration
-			jobError := result.Error
-			fmt.Println(jobName, jobDuration, jobError, message, isSuccess)
+			//isSuccess := result.Data.Some.Success
+			//message := result.Data.Some.Message
+			//jobName := result.Name
+			//jobDuration := result.Duration
+			//jobError := result.Error
+			//fmt.Println(jobName, jobDuration, jobError, message, isSuccess)
 		}
 		if result.Data.Web != nil {
 			// Handle 'WebResult' job
@@ -291,7 +291,10 @@ func TestStopWait(t *testing.T) {
 		},
 	})
 
-	resultsBeforeStop := wp.results
+	wp.resultsMutex.Lock()
+	resultsBeforeStop := make([]Result[ReturnTypes], len(wp.results))
+	copy(resultsBeforeStop, wp.results)
+	wp.resultsMutex.Unlock()
 	wp.StopWaitXT()
 
 	mu.Lock()
@@ -439,20 +442,16 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 			return ReturnTypes{Bool: true}, nil
 		},
 	})
-
-	firstResults := wp.StopWaitXT()
-
+	/*firstResults :=*/ wp.StopWaitXT()
 	wp.SubmitXT(Job[ReturnTypes]{
 		Name: "after",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{Bool: true}, nil
 		},
 	})
-
-	secondResults := wp.StopWaitXT()
-
-	fmt.Println("firstResults ", firstResults)
-	fmt.Println("secondResults", secondResults)
+	/*secondResults :=*/ wp.StopWaitXT()
+	//fmt.Println("firstResults ", firstResults)
+	//fmt.Println("secondResults", secondResults)
 }
 
 func TestNilFunctionInJob(t *testing.T) {
@@ -461,8 +460,8 @@ func TestNilFunctionInJob(t *testing.T) {
 		Name:     "nil func",
 		Function: nil,
 	})
-	res := wp.StopWaitXT()
-	fmt.Println("res", res)
+	/*res :=*/ wp.StopWaitXT()
+	//fmt.Println("res", res)
 }
 
 func TestGenericResults(t *testing.T) {

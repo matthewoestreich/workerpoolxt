@@ -1,3 +1,26 @@
+#
+#
+#
+#
+# THIS IS OLD BUT I AM KEEPING JUST IN CASE
+#
+#
+#
+#
+#
+#
+#
+
+
+
+
+
+
+
+
+
+
+
 #!/usr/bin/env bash
 # ====================================================================== #
 # Thanks to https://github.com/gammazero/workerpool for the inspiration! #
