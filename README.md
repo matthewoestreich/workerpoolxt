@@ -29,7 +29,7 @@ import wpxt "github.com/matthewoestreich/workerpoolxt"
 
 ### Hello, world!
 
-[Playground](https://go.dev/play/p/WXwgyxl_xlQ)
+[Playground](https://go.dev/play/p/0TtA40_vtRO)
 
 ```go
 numWorkers := 5
