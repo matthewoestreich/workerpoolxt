@@ -3,6 +3,7 @@
   Worker pool library that extends <a href="https://github.com/gammazero/workerpool">https://github.com/gammazero/workerpool</a>
 </p>
 <p align="center"><code>go get github.com/matthewoestreich/workerpoolxt</code></p>
+<p align="center"><a href="https://pkg.go.dev/github.com/matthewoestreich/workerpoolxt" target="_blank" rel="noopener noreferrer">pkg.go.dev</a></p>
 
 ---
 
@@ -20,7 +21,7 @@ import wpxt "github.com/matthewoestreich/workerpoolxt"
 
 ## Examples
 
-### Hello, world! 
+### Hello, world!
 
 [Playground](https://go.dev/play/p/WXwgyxl_xlQ)
 
