@@ -3,7 +3,7 @@
   Worker pool library that extends <a href="https://github.com/gammazero/workerpool">https://github.com/gammazero/workerpool</a>
 </p>
 <p align="center"><code>go get github.com/matthewoestreich/workerpoolxt/generic</code></p>
-<p align="center"><a href="https://pkg.go.dev/github.com/matthewoestreich/workerpoolxt" target="_blank" rel="noopener noreferrer">pkg.go.dev</a></p>
+<p align="center"><a href="https://pkg.go.dev/github.com/matthewoestreich/workerpoolxt/generic" target="_blank" rel="noopener noreferrer">pkg.go.dev</a></p>
 
 ---
 
