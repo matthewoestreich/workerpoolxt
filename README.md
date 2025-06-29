@@ -7,11 +7,17 @@
 
 ---
 
-## Features
+## Synopsis
 
-We wrap the func(s) that get passed to `workerpool`, which we call "jobs".
+We wrap the func(s) that get passed to `workerpool`, which we call "jobs". Job results will be returned to you after all jobs have completed.
 
-You can collect results from each job (errors included), give each job a name, get the duration each job ran for, plus more.
+You have the ability to give each job a name. You can access job results, job runtime duration, or any job errors within job results. In `gammazero/workerpool` this is not possible - you do not have the ability to get any sort of result or error data from a "job".
+
+**You still retain access to all `gammazero/workerpool` members. See [`Native Member Access`](#native-member-access) for more.**
+
+## Generics
+
+If you want to use this package with type-safe generics, [please see here](/generic).
 
 ## Import
 
@@ -31,19 +37,34 @@ pool := wpxt.New(numWorkers)
 
 helloWorldJob := wpxt.Job{
   Name: "Hello world job",
-  Function: func() wpxt.Result {
-    return wpxt.Result{Data: "Hello, world!", Error: nil}
+  // Function signature must be |func() (any, error)|
+  Function: func() (any, error) {
+    pretendError := nil
+    if pretendError != nil {
+      // To demonstrate how you would return an error
+      return nil, theError
+    }
+    return "Hello, world!", nil
   },
 }
 
 // Submit job
 pool.SubmitXT(helloWorldJob)
+
 // Block main thread until all jobs are done.
 results := pool.StopWaitXT()
+
+// Results also accessable via
+sameResults := pool.Results()
+
 // Grab first result
 r := results[0]
+
 // Print it to console
-fmt.Printf("Name: %s\nData: %v\nDuration: %v\nError?: %v", r.Name(), r.Data, r.Duration(), r.Error)
+fmt.Printf(
+  "Name: %s\nData: %v\nDuration: %v\nError?: %v", 
+  r.Name, r.Data, r.Duration, r.Error,
+)
 /*
 Name: Hello world job
 Data: Hello, world!
@@ -98,4 +119,20 @@ wpxt.Job{
     return wpxt.Result{Data: result}
   },
 }
+```
+
+# Native Member Access
+
+Using native `gammazero/workerpool` members with `workerpoolxt`.
+
+## StopWait
+
+If you would like to use the native `.StopWait()` instead of `allResults := .StopWaitXT()`, here is how you can still gain access to job results.
+
+```go
+wp := wpxt.New(4)
+// Submit a bunch of jobs
+wp.StopWait()
+allResults := wp.Results()
+// Do something with |allResults|
 ```
