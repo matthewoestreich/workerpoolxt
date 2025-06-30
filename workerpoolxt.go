@@ -39,7 +39,7 @@ func (wp *WorkerPoolXT) SubmitXT(job Job) error {
 	}
 
 	submitErr := wp.trySubmit(func() {
-		defer recoverFromJobPanic(wp, job)
+		defer recoverFromJobPanic(wp, &job)
 
 		job.startedAt = time.Now()
 		data, err := job.Function()
@@ -125,13 +125,13 @@ func (e PanicRecoveryError) Error() string {
 }
 
 // Helper function to recover from a panic within a job
-func recoverFromJobPanic(wp *WorkerPoolXT, j Job) {
+func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 	if r := recover(); r != nil {
 		wp.appendResult(Result{
 			Name: j.Name,
 			Error: PanicRecoveryError{
 				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
-				Job:     j,
+				Job:     *j,
 			},
 			Data:     nil,
 			Duration: time.Since(j.startedAt),
