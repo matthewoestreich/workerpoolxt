@@ -292,7 +292,7 @@ func TestStopWait(t *testing.T) {
 	})
 
 	wp.resultsMutex.Lock()
-	resultsBeforeStop := make([]Result[ReturnTypes], len(wp.results))
+	resultsBeforeStop := make([]*Result[ReturnTypes], len(wp.results))
 	copy(resultsBeforeStop, wp.results)
 	wp.resultsMutex.Unlock()
 	wp.StopWaitXT()

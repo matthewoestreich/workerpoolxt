@@ -13,7 +13,7 @@ import (
 func New(size int) *WorkerPoolXT {
 	return &WorkerPoolXT{
 		WorkerPool: workerpool.New(size),
-		results:    []Result{},
+		results:    []*Result{},
 	}
 }
 
@@ -21,14 +21,14 @@ func New(size int) *WorkerPoolXT {
 type WorkerPoolXT struct {
 	*workerpool.WorkerPool
 	resultsMutex sync.Mutex
-	results      []Result
+	results      []*Result
 	once         sync.Once
 }
 
 // Results gets results, if any exist.
 // You should call |.StopWait()| first.
 // Preferrably you should use |allResult := .StopWaitXT()|
-func (wp *WorkerPoolXT) Results() []Result {
+func (wp *WorkerPoolXT) Results() []*Result {
 	return wp.results
 }
 
@@ -45,7 +45,7 @@ func (wp *WorkerPoolXT) SubmitXT(job Job) error {
 		data, err := job.Function()
 		duration := time.Since(job.startedAt)
 
-		wp.appendResult(Result{
+		wp.appendResult(&Result{
 			Name:     job.Name,
 			Error:    err,
 			Duration: duration,
@@ -54,7 +54,7 @@ func (wp *WorkerPoolXT) SubmitXT(job Job) error {
 	})
 
 	if submitErr != nil {
-		wp.appendResult(Result{
+		wp.appendResult(&Result{
 			Name: job.Name,
 			Error: PanicRecoveryError{
 				Job:     job,
@@ -69,7 +69,7 @@ func (wp *WorkerPoolXT) SubmitXT(job Job) error {
 }
 
 // StopWaitXT blocks main thread and waits for all jobs
-func (wp *WorkerPoolXT) StopWaitXT() []Result {
+func (wp *WorkerPoolXT) StopWaitXT() []*Result {
 	wp.once.Do(func() {
 		wp.StopWait()
 	})
@@ -127,7 +127,7 @@ func (e PanicRecoveryError) Error() string {
 // Helper function to recover from a panic within a job
 func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 	if r := recover(); r != nil {
-		wp.appendResult(Result{
+		wp.appendResult(&Result{
 			Name: j.Name,
 			Error: PanicRecoveryError{
 				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
