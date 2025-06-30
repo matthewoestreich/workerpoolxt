@@ -82,15 +82,15 @@ The point is: you have full control over every job.
 ```go
 wpxt.Job{
   Name: "Job using context",
-  Function: func() wpxt.Result {
+  Function: func() (any, error) {
     timeout := 10 * time.Second
     ctx, cancel := context.WithTimeout(context.Background(), timeout)
     defer cancel()
     result, err := LongRunningTaskWithContext(ctx)
     if err != nil {
-    	return wpxt.Result{Error: err}
+    	return nil, err
     }
-    return wpxt.Result{Data: result}
+    return result, nil
   },
 }
 ```
@@ -104,7 +104,7 @@ The point is: you have full control over every job.
 ```go
 wpxt.Job{
   Name: "Job using retry",
-  Function: func() wpxt.Result {
+  Function: func() (any, error) {
     work := func() (string, error) {
       if /* Some result is an error */ {
         return "", theError
@@ -114,9 +114,9 @@ wpxt.Job{
     expBackoff := backoff.WithBackOff(backoff.NewExponentialBackOff())
     result, err := backoff.Retry(ctx, work, expBackoff)
     if err != nil {
-    	return wpxt.Result{Error: err}
+    	return nil, err
     }
-    return wpxt.Result{Data: result}
+    return result, nil
   },
 }
 ```
@@ -131,8 +131,13 @@ If you would like to use the native `.StopWait()` instead of `allResults := .Sto
 
 ```go
 wp := wpxt.New(4)
-// Submit a bunch of jobs
+
+//
+// Submitting a bunch of jobs here
+//
+
 wp.StopWait()
+
 allResults := wp.Results()
 // Do something with |allResults|
 ```
