@@ -21,7 +21,7 @@ import wpxt "github.com/matthewoestreich/workerpoolxt/generic"
 
 High level example showing how to use with generics.
 
-[Playground](https://go.dev/play/p/CrY-P-i5yeL)
+[Playground](https://go.dev/play/p/XuaSdqYxWqA)
 
 ```go
 // First define possible return types for any given job.
