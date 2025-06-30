@@ -35,7 +35,7 @@ import wpxt "github.com/matthewoestreich/workerpoolxt"
 numWorkers := 5
 pool := wpxt.New(numWorkers)
 
-helloWorldJob := wpxt.Job{
+helloWorldJob := &wpxt.Job{
   Name: "Hello world job",
   // Function signature must be |func() (any, error)|
   Function: func() (any, error) {
@@ -80,7 +80,7 @@ Works with timeouts, cancelled context, etc..
 The point is: you have full control over every job.
 
 ```go
-wpxt.Job{
+&wpxt.Job{
   Name: "Job using context",
   Function: func() (any, error) {
     timeout := 10 * time.Second
@@ -102,7 +102,7 @@ You can use something like [backoff](https://github.com/cenkalti/backoff) for th
 The point is: you have full control over every job.
 
 ```go
-wpxt.Job{
+&wpxt.Job{
   Name: "Job using retry",
   Function: func() (any, error) {
     work := func() (string, error) {

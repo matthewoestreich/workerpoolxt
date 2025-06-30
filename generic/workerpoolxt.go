@@ -33,13 +33,13 @@ func (wp *WorkerPoolXT[T]) Results() []*Result[T] {
 }
 
 // SubmitXT submits a Job to workerpool
-func (wp *WorkerPoolXT[T]) SubmitXT(job Job[T]) error {
+func (wp *WorkerPoolXT[T]) SubmitXT(job *Job[T]) error {
 	if job.Function == nil {
 		return errors.New("job.Function is nil")
 	}
 
 	submitErr := wp.trySubmit(func() {
-		defer recoverFromJobPanic(wp, &job)
+		defer recoverFromJobPanic(wp, job)
 
 		job.startedAt = time.Now()
 		data, err := job.Function()
@@ -116,7 +116,7 @@ type Job[T any] struct {
 
 // PanicRecoveryError is what gets thrown during job panic recovery
 type PanicRecoveryError[T any] struct {
-	Job     Job[T]
+	Job     *Job[T]
 	Message string
 }
 
@@ -131,7 +131,7 @@ func recoverFromJobPanic[T any](wp *WorkerPoolXT[T], j *Job[T]) {
 			Name: j.Name,
 			Error: PanicRecoveryError[T]{
 				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
-				Job:     *j,
+				Job:     j,
 			},
 			Data:     *new(T),
 			Duration: time.Since(j.startedAt),

@@ -45,7 +45,7 @@ func TestHelloWorldFromREADME(t *testing.T) {
 	numWorkers := 5
 	wp := New(numWorkers)
 
-	helloWorldJob := Job{
+	helloWorldJob := &Job{
 		Name: "Hello world job",
 		Function: func() (any, error) {
 			return "Hello, world!", nil
@@ -65,19 +65,19 @@ func TestHelloWorldFromREADME(t *testing.T) {
 
 func TestBasics(t *testing.T) {
 	wp := New(5)
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "a",
 		Function: func() (any, error) {
 			return true, nil
 		},
 	})
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "b",
 		Function: func() (any, error) {
 			return true, nil
 		},
 	})
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "c",
 		Function: func() (any, error) {
 			return nil, errors.New("err")
@@ -97,7 +97,7 @@ func TestWorkerPoolCancelsJobEarly(t *testing.T) {
 	var jobStarted = make(chan struct{})
 	var jobCancelled = make(chan struct{})
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "cancellable-job",
 		Function: func() (any, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -144,7 +144,7 @@ func TestTimeouts(t *testing.T) {
 	numWorkers := 10
 	wp := New(numWorkers)
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "my ctx job",
 		Function: func() (any, error) {
 			timeout := time.Duration(100 * time.Millisecond)
@@ -171,7 +171,7 @@ func TestTimeouts(t *testing.T) {
 func TestJobPanicRecovery(t *testing.T) {
 	wp := New(1)
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "panic job",
 		Function: func() (any, error) {
 			panic("PANIC")
@@ -193,7 +193,7 @@ func TestStopWait(t *testing.T) {
 	var mu sync.Mutex
 	var ran []string
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "job1",
 		Function: func() (any, error) {
 			time.Sleep(100 * time.Millisecond)
@@ -204,7 +204,7 @@ func TestStopWait(t *testing.T) {
 		},
 	})
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "job2",
 		Function: func() (any, error) {
 			time.Sleep(200 * time.Millisecond)
@@ -237,7 +237,7 @@ func TestSubmitXT_ContextCancellation(t *testing.T) {
 	jobStarted := make(chan struct{})
 	jobCancelled := make(chan struct{})
 
-	err := wp.SubmitXT(Job{
+	err := wp.SubmitXT(&Job{
 		Name: "cancellable job",
 		Function: func() (any, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -289,7 +289,7 @@ func TestJobRetry(t *testing.T) {
 	maxRetry := 3
 	numRetry := 0
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "retry-job",
 		Function: func() (any, error) {
 			workToRetry := func() (string, error) {
@@ -324,7 +324,7 @@ func TestJobRetry(t *testing.T) {
 func TestNativeStopWait(t *testing.T) {
 	wp := New(4)
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "native-stopwait",
 		Function: func() (any, error) {
 			time.Sleep(1 * time.Second)
@@ -345,7 +345,7 @@ func TestCallingResultsBeforeStopWait(t *testing.T) {
 	if len(premature) > 0 {
 		t.Fatal("expected 0 premature results")
 	}
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "Foo",
 		Function: func() (any, error) {
 			return true, nil
@@ -360,7 +360,7 @@ func TestCallingResultsBeforeStopWait(t *testing.T) {
 
 func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 	wp := New(3)
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "before",
 		Function: func() (any, error) {
 			return true, nil
@@ -370,7 +370,7 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 	/*firstResults :=*/
 	wp.StopWaitXT()
 
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name: "after",
 		Function: func() (any, error) {
 			return true, nil
@@ -385,7 +385,7 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 
 func TestNilFunctionInJob(t *testing.T) {
 	wp := New(2)
-	wp.SubmitXT(Job{
+	wp.SubmitXT(&Job{
 		Name:     "nil func",
 		Function: nil,
 	})

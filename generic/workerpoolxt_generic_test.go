@@ -67,7 +67,7 @@ func TestCodeFromREADME(t *testing.T) {
 	// Use "container" type as generic
 	pool := New[Output](5)
 
-	helloWorldJob := Job[Output]{
+	helloWorldJob := &Job[Output]{
 		Name: "Hello world job",
 		// Function signature must be |func() (T, error)|
 		Function: func() (Output, error) {
@@ -80,7 +80,7 @@ func TestCodeFromREADME(t *testing.T) {
 		},
 	}
 
-	someJob := Job[Output]{
+	someJob := &Job[Output]{
 		Name: "Some job",
 		Function: func() (Output, error) {
 			someResult := &SomeResult{
@@ -91,7 +91,7 @@ func TestCodeFromREADME(t *testing.T) {
 		},
 	}
 
-	webJob := Job[Output]{
+	webJob := &Job[Output]{
 		Name: "Web job",
 		Function: func() (Output, error) {
 			webResult := &WebResult{Response: "that thing, we did it!"}
@@ -99,7 +99,7 @@ func TestCodeFromREADME(t *testing.T) {
 		},
 	}
 
-	jobs := []Job[Output]{
+	jobs := []*Job[Output]{
 		helloWorldJob,
 		someJob,
 		webJob,
@@ -141,19 +141,19 @@ func TestCodeFromREADME(t *testing.T) {
 
 func TestBasics(t *testing.T) {
 	wp := New[ReturnTypes](5)
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "a",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{Bool: true}, nil
 		},
 	})
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "b",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{Bool: true}, nil
 		},
 	})
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "c",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{}, errors.New("err")
@@ -173,7 +173,7 @@ func TestWorkerPoolCancelsJobEarly(t *testing.T) {
 	var jobStarted = make(chan struct{})
 	var jobCancelled = make(chan struct{})
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "cancellable-job",
 		Function: func() (ReturnTypes, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -220,7 +220,7 @@ func TestTimeouts(t *testing.T) {
 	numWorkers := 10
 	wp := New[ReturnTypes](numWorkers)
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "my ctx job",
 		Function: func() (ReturnTypes, error) {
 			timeout := time.Duration(100 * time.Millisecond)
@@ -247,7 +247,7 @@ func TestTimeouts(t *testing.T) {
 func TestJobPanicRecovery(t *testing.T) {
 	wp := New[ReturnTypes](1)
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "panic job",
 		Function: func() (ReturnTypes, error) {
 			panic("PANIC")
@@ -269,7 +269,7 @@ func TestStopWait(t *testing.T) {
 	var mu sync.Mutex
 	var ran []string
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "job1",
 		Function: func() (ReturnTypes, error) {
 			time.Sleep(100 * time.Millisecond)
@@ -280,7 +280,7 @@ func TestStopWait(t *testing.T) {
 		},
 	})
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "job2",
 		Function: func() (ReturnTypes, error) {
 			time.Sleep(200 * time.Millisecond)
@@ -313,7 +313,7 @@ func TestSubmitXT_ContextCancellation(t *testing.T) {
 	jobStarted := make(chan struct{})
 	jobCancelled := make(chan struct{})
 
-	err := wp.SubmitXT(Job[ReturnTypes]{
+	err := wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "cancellable job",
 		Function: func() (ReturnTypes, error) {
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -365,7 +365,7 @@ func TestJobRetry(t *testing.T) {
 	maxRetry := 3
 	numRetry := 0
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "retry-job",
 		Function: func() (ReturnTypes, error) {
 			workToRetry := func() (string, error) {
@@ -400,7 +400,7 @@ func TestJobRetry(t *testing.T) {
 func TestNativeStopWait(t *testing.T) {
 	wp := New[ReturnTypes](4)
 
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "native-stopwait",
 		Function: func() (ReturnTypes, error) {
 			time.Sleep(1 * time.Second)
@@ -421,7 +421,7 @@ func TestCallingResultsBeforeStopWait(t *testing.T) {
 	if len(premature) > 0 {
 		t.Fatal("expected 0 premature results")
 	}
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "Foo",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{Bool: true}, nil
@@ -436,14 +436,14 @@ func TestCallingResultsBeforeStopWait(t *testing.T) {
 
 func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 	wp := New[ReturnTypes](3)
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "before",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{Bool: true}, nil
 		},
 	})
 	/*firstResults :=*/ wp.StopWaitXT()
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name: "after",
 		Function: func() (ReturnTypes, error) {
 			return ReturnTypes{Bool: true}, nil
@@ -456,7 +456,7 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 
 func TestNilFunctionInJob(t *testing.T) {
 	wp := New[ReturnTypes](2)
-	wp.SubmitXT(Job[ReturnTypes]{
+	wp.SubmitXT(&Job[ReturnTypes]{
 		Name:     "nil func",
 		Function: nil,
 	})
@@ -484,14 +484,14 @@ func TestGenericResults(t *testing.T) {
 
 	wp := New[Output](5)
 
-	wp.SubmitXT(Job[Output]{
+	wp.SubmitXT(&Job[Output]{
 		Name: "Web Job",
 		Function: func() (Output, error) {
 			webResult := &WebResult{Response: "some data from some website"}
 			return Output{Web: webResult}, nil
 		},
 	})
-	wp.SubmitXT(Job[Output]{
+	wp.SubmitXT(&Job[Output]{
 		Name: "Foo Job",
 		Function: func() (Output, error) {
 			foo := &FooResult{
@@ -500,7 +500,7 @@ func TestGenericResults(t *testing.T) {
 			return Output{Foo: foo}, nil
 		},
 	})
-	wp.SubmitXT(Job[Output]{
+	wp.SubmitXT(&Job[Output]{
 		Name: "String Job",
 		Function: func() (Output, error) {
 			return Output{String: "hello"}, nil

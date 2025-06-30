@@ -46,7 +46,7 @@ pool := wpxt.New[Output](5)
 
 // Create jobs
 
-helloWorldJob := wpxt.Job[Output]{
+helloWorldJob := &wpxt.Job[Output]{
   Name: "Hello world job",
   // Function signature must be |func() (T, error)|
   Function: func() (Output, error) {
@@ -59,7 +59,7 @@ helloWorldJob := wpxt.Job[Output]{
   },
 }
 
-someJob := wpxt.Job[Output]{
+someJob := &wpxt.Job[Output]{
   Name: "Some job",
   Function: func() (Output, error) {
     someResult := &SomeResult{
@@ -70,7 +70,7 @@ someJob := wpxt.Job[Output]{
   },
 }
 
-webJob := wpxt.Job[Output]{
+webJob := &wpxt.Job[Output]{
   Name: "Web job",
   Function: func() (Output, error) {
     webResult := &WebResult{Response: "that thing, we did it!"}
@@ -79,7 +79,7 @@ webJob := wpxt.Job[Output]{
 }
 
 // Collect jobs
-jobs := []wpxt.Job[Output]{
+jobs := []*wpxt.Job[Output]{
   helloWorldJob,
   someJob,
   webJob,
