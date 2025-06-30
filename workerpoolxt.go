@@ -10,30 +10,23 @@ import (
 )
 
 // New creates a new workerpoolxt
-func New(size int) *workerpoolxt {
-	return &workerpoolxt{
+func New(size int) *WorkerPoolXT {
+	return &WorkerPoolXT{
 		WorkerPool: workerpool.New(size),
 		results:    []*Result{},
 	}
 }
 
 // WithWorkerPool creates a new workerpoolxt using an existing WorkerPool
-func WithWorkerPool(workerpool *workerpool.WorkerPool) *workerpoolxt {
-	return &workerpoolxt{
+func WithWorkerPool(workerpool *workerpool.WorkerPool) *WorkerPoolXT {
+	return &WorkerPoolXT{
 		WorkerPool: workerpool,
 		results:    []*Result{},
 	}
 }
 
 // WorkerPoolXT wraps workerpool
-type WorkerPoolXT interface {
-	SubmitXT(*Job) error
-	StopWaitXT() []*Result
-	Results() []*Result
-}
-
-// Concrete type backing WorkerPoolXT interface
-type workerpoolxt struct {
+type WorkerPoolXT struct {
 	*workerpool.WorkerPool
 	resultsMutex sync.Mutex
 	results      []*Result
@@ -43,12 +36,12 @@ type workerpoolxt struct {
 // Results gets results, if any exist.
 // You should call |.StopWait()| first.
 // Preferrably you should use |allResult := .StopWaitXT()|
-func (wp *workerpoolxt) Results() []*Result {
+func (wp *WorkerPoolXT) Results() []*Result {
 	return wp.results
 }
 
 // SubmitXT submits a Job to workerpool
-func (wp *workerpoolxt) SubmitXT(job *Job) error {
+func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 	if job.Function == nil {
 		return errors.New("job.Function is nil")
 	}
@@ -84,7 +77,7 @@ func (wp *workerpoolxt) SubmitXT(job *Job) error {
 }
 
 // StopWaitXT blocks main thread and waits for all jobs
-func (wp *workerpoolxt) StopWaitXT() []*Result {
+func (wp *WorkerPoolXT) StopWaitXT() []*Result {
 	wp.once.Do(func() {
 		wp.StopWait()
 	})
@@ -92,7 +85,7 @@ func (wp *workerpoolxt) StopWaitXT() []*Result {
 }
 
 // Gives us an error if there is a panic during job submission.
-func (wp *workerpoolxt) trySubmit(fn func()) (err error) {
+func (wp *WorkerPoolXT) trySubmit(fn func()) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic during submit: %v", r)
@@ -103,7 +96,7 @@ func (wp *workerpoolxt) trySubmit(fn func()) (err error) {
 }
 
 // Handles locking/unlocking mutex while appending result to results.
-func (wp *workerpoolxt) appendResult(result *Result) {
+func (wp *WorkerPoolXT) appendResult(result *Result) {
 	wp.resultsMutex.Lock()
 	wp.results = append(wp.results, result)
 	wp.resultsMutex.Unlock()
@@ -140,7 +133,7 @@ func (e PanicRecoveryError) Error() string {
 }
 
 // Helper function to recover from a panic within a job
-func recoverFromJobPanic(wp *workerpoolxt, j *Job) {
+func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 	if r := recover(); r != nil {
 		wp.appendResult(&Result{
 			Name: j.Name,
