@@ -88,7 +88,7 @@ func (wp *WorkerPoolXT) trySubmit(fn func()) (err error) {
 }
 
 // Handles locking/unlocking mutex while appending result to results.
-func (wp *WorkerPoolXT) appendResult(result Result) {
+func (wp *WorkerPoolXT) appendResult(result *Result) {
 	wp.resultsMutex.Lock()
 	wp.results = append(wp.results, result)
 	wp.resultsMutex.Unlock()
