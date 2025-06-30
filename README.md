@@ -35,6 +35,9 @@ import wpxt "github.com/matthewoestreich/workerpoolxt"
 numWorkers := 5
 pool := wpxt.New(numWorkers)
 
+// Or if you have an existing |*workerpool.WorkerPool| instance
+pool := wpxt.WithWorkerPool(existingWorkerPool)
+
 helloWorldJob := &wpxt.Job{
   Name: "Hello world job",
   // Function signature must be |func() (any, error)|

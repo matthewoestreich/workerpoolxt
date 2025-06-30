@@ -3,13 +3,14 @@ package generic
 import (
 	"context"
 	"errors"
-	//"fmt"
+
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v5"
+	"github.com/gammazero/workerpool"
 )
 
 func SleepForWithContext(ctx context.Context, sleepFor time.Duration) error {
@@ -527,5 +528,23 @@ func TestGenericResults(t *testing.T) {
 
 	if webJobs != 1 || fooJobs != 1 || strJobs != 1 {
 		t.Fatal("expected 1 Web job and 1 Foo job and 1 string job")
+	}
+}
+
+func TestWithWorkerPool(t *testing.T) {
+	existing := workerpool.New(5)
+	wp := WithWorkerPool[string](existing)
+
+	wp.SubmitXT(&Job[string]{
+		Name: "WithWorkerPool",
+		Function: func() (string, error) {
+			return "yup", nil
+		},
+	})
+
+	res := wp.StopWaitXT()
+
+	if len(res) != 1 {
+		t.Fatal("expected 1 result")
 	}
 }

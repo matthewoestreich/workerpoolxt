@@ -44,6 +44,9 @@ type Output struct {
 // Use "container" type as generic
 pool := wpxt.New[Output](5)
 
+// Or if you have an existing |*workerpool.WorkerPool| instance
+pool := wpxt.WithWorkerPool[Output](existingWorkerPool)
+
 // Create jobs
 
 helloWorldJob := &wpxt.Job[Output]{

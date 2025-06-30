@@ -3,6 +3,7 @@ package workerpoolxt
 import (
 	"context"
 	"errors"
+
 	//"fmt"
 	"strconv"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v5"
+	"github.com/gammazero/workerpool"
 )
 
 func SleepForWithContext(ctx context.Context, sleepFor time.Duration) error {
@@ -391,4 +393,22 @@ func TestNilFunctionInJob(t *testing.T) {
 	})
 	/*res :=*/ wp.StopWaitXT()
 	//fmt.Println("res", res)
+}
+
+func TestWithWorkerPool(t *testing.T) {
+	existing := workerpool.New(5)
+	wp := WithWorkerPool(existing)
+
+	wp.SubmitXT(&Job{
+		Name: "WithWorkerPool",
+		Function: func() (any, error) {
+			return "yup", nil
+		},
+	})
+
+	res := wp.StopWaitXT()
+
+	if len(res) != 1 {
+		t.Fatal("expected 1 result")
+	}
 }
