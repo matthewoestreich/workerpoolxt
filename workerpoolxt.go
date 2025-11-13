@@ -229,7 +229,7 @@ func (p *WorkerPool) Pause(ctx context.Context) {
 	ready.Add(p.maxWorkers)
 	for i := 0; i < p.maxWorkers; i++ {
 		p.Submit(&Job{
-			Name: "pause " + strconv.Itoa(i),
+			Name: "pause_" + strconv.Itoa(i),
 			Function: func() (any, error) {
 				ready.Done()
 				select {
