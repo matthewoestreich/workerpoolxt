@@ -228,17 +228,13 @@ func (p *WorkerPool) Pause(ctx context.Context) {
 	ready := new(sync.WaitGroup)
 	ready.Add(p.maxWorkers)
 	for i := 0; i < p.maxWorkers; i++ {
-		_i := i
-		_ready := ready
-		_ctx := ctx
-		_stopSignal := p.stopSignal
 		p.Submit(&Job{
-			Name: "pause " + strconv.Itoa(_i),
+			Name: "pause " + strconv.Itoa(i),
 			Function: func() (any, error) {
-				_ready.Done()
+				ready.Done()
 				select {
-				case <-_ctx.Done():
-				case <-_stopSignal: //.stopSignal:
+				case <-ctx.Done():
+				case <-p.stopSignal:
 				}
 				return nil, nil
 			},
