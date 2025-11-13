@@ -337,7 +337,7 @@ func TestNativeStopWait(t *testing.T) {
 	wp.StopWait()
 	allResults := wp.Results()
 	if len(allResults) != 1 {
-		t.Fatal("expected 1 result")
+		t.Fatalf("expected 1 result got %d\n", len(allResults))
 	}
 }
 

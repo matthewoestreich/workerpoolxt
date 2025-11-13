@@ -11,18 +11,19 @@ import (
 
 // New creates a new workerpoolxt
 func New(size int) *WorkerPoolXT {
-	return &WorkerPoolXT{
-		WorkerPool: workerpool.New(size),
-		results:    []*Result{},
-	}
+	wp := workerpool.New(size)
+	return WithWorkerPool(wp)
 }
 
 // WithWorkerPool creates a new workerpoolxt using an existing WorkerPool
 func WithWorkerPool(workerpool *workerpool.WorkerPool) *WorkerPoolXT {
-	return &WorkerPoolXT{
+	wpxt := &WorkerPoolXT{
 		WorkerPool: workerpool,
 		results:    []*Result{},
+		resultsChan: make(chan *Result, 2),
 	}
+	go wpxt.processResults()
+	return wpxt;
 }
 
 // WorkerPoolXT wraps workerpool
@@ -30,6 +31,7 @@ type WorkerPoolXT struct {
 	*workerpool.WorkerPool
 	resultsMutex sync.Mutex
 	results      []*Result
+	resultsChan  chan *Result
 	once         sync.Once
 }
 
@@ -38,6 +40,12 @@ type WorkerPoolXT struct {
 // Preferrably you should use |allResult := .StopWaitXT()|
 func (wp *WorkerPoolXT) Results() []*Result {
 	return wp.results
+}
+
+func (wp *WorkerPoolXT) processResults() {
+	for result := range wp.resultsChan {
+		wp.appendResult(result)
+	}
 }
 
 // SubmitXT submits a Job to workerpool
@@ -53,16 +61,16 @@ func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 		data, err := job.Function()
 		duration := time.Since(job.startedAt)
 
-		wp.appendResult(&Result{
+		wp.resultsChan <- &Result{
 			Name:     job.Name,
 			Error:    err,
 			Duration: duration,
 			Data:     data,
-		})
+		}
 	})
 
 	if submitErr != nil {
-		wp.appendResult(&Result{
+		wp.resultsChan <- &Result{
 			Name: job.Name,
 			Error: PanicRecoveryError{
 				Job:     job,
@@ -70,7 +78,7 @@ func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 			},
 			Duration: 0,
 			Data:     nil,
-		})
+		}
 	}
 
 	return nil
@@ -80,6 +88,7 @@ func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 func (wp *WorkerPoolXT) StopWaitXT() []*Result {
 	wp.once.Do(func() {
 		wp.StopWait()
+		close(wp.resultsChan)
 	})
 	return wp.results
 }
@@ -135,7 +144,7 @@ func (e PanicRecoveryError) Error() string {
 // Helper function to recover from a panic within a job
 func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 	if r := recover(); r != nil {
-		wp.appendResult(&Result{
+		wp.resultsChan <- &Result{
 			Name: j.Name,
 			Error: PanicRecoveryError{
 				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
@@ -143,6 +152,6 @@ func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 			},
 			Data:     nil,
 			Duration: time.Since(j.startedAt),
-		})
+		}
 	}
 }
