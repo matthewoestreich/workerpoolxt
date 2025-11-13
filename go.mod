@@ -7,4 +7,7 @@ require (
 	github.com/gammazero/workerpool v1.1.1
 )
 
-require github.com/gammazero/deque v0.0.0-20200721202602-07291166fe33 // indirect
+require (
+	github.com/gammazero/deque v1.2.0 // indirect
+	go.uber.org/goleak v1.3.0 // indirect
+)
