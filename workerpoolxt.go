@@ -3,6 +3,7 @@ package workerpoolxt
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,16 +19,54 @@ const (
 type Job struct {
 	Name         string
 	Function     func() (any, error)
-	startedAt    time.Time
+	wg           *sync.WaitGroup
+	hasAdded     bool
 	ignoreResult bool
+	error        error
+	data         any
+	duration     time.Duration
+}
+
+func (j *Job) setWaitGroup(wg *sync.WaitGroup) {
+	j.wg = wg
+	j.hasAdded = false
+}
+
+// add will increment the `Job.wg` WaitGroup by 1 if all of the following are true:
+// - The WaitGroup exists (not nil)
+// - Job.hasAdded == false
+// - Job.ignoreResult == false
+// This also sets the `Job.hasAdded` flag to true.
+func (j *Job) add() {
+	if j.wg == nil || j.hasAdded || j.ignoreResult {
+		return
+	}
+	j.wg.Add(1)
+	j.hasAdded = true
+}
+
+// done calls `Job.wg.Done()` if `Job.wg` is not nil and `Job.hasAdded` is false.
+func (j *Job) done() {
+	if j.wg != nil && j.hasAdded {
+		j.wg.Done()
+	}
+}
+
+func (j *Job) String() string {
+	return fmt.Sprintf(`Job {
+	Name: "%s",
+	Data: %v,
+	Error: %v,
+	Duration: %s,
+}
+`, j.Name, j.data, j.error, j.duration)
 }
 
 type Result struct {
-	Error        error
-	Data         any
-	Name         string
-	Duration     time.Duration
-	ignoreResult bool
+	Error    error
+	Data     any
+	Name     string
+	Duration time.Duration
 }
 
 func (r Result) String() string {
@@ -52,19 +91,20 @@ func New(maxWorkers int) *WorkerPool {
 	}
 
 	pool := &WorkerPool{
-		maxWorkers:  maxWorkers,
-		taskQueue:   make(chan *Job),
-		workerQueue: make(chan *Job),
-		stopSignal:  make(chan struct{}),
-		stoppedChan: make(chan struct{}),
-		resultsChan: make(chan Result, maxWorkers*2),
-		results:     []Result{},
+		maxWorkers:         maxWorkers,
+		taskQueue:          make(chan *Job),
+		workerQueue:        make(chan *Job),
+		stopSignal:         make(chan struct{}),
+		stoppedChan:        make(chan struct{}),
+		jobProcessingQueue: make(chan *Job, maxWorkers*2),
+		results:            []Result{},
 	}
 
 	// Start the task dispatcher.
 	go pool.dispatch()
-	// Start the results processor
-	go pool.processResults()
+	// Start the job results processor
+	pool.jobProcessingWaitGroup.Add(1)
+	go pool.processJobResults()
 
 	return pool
 }
@@ -72,35 +112,21 @@ func New(maxWorkers int) *WorkerPool {
 // WorkerPool is a collection of goroutines, where the number of concurrent
 // goroutines processing requests does not exceed the specified maximum.
 type WorkerPool struct {
-	maxWorkers       int
-	taskQueue        chan *Job
-	workerQueue      chan *Job
-	stoppedChan      chan struct{}
-	stopSignal       chan struct{}
-	resultsChan      chan Result
-	resultsWaitGroup sync.WaitGroup
-	results          []Result
-	waitingQueue     deque.Deque[*Job]
-	stopLock         sync.Mutex
-	stopOnce         sync.Once
-	stopped          bool
-	waiting          int32
-	wait             bool
-}
-
-func (p *WorkerPool) resultsWGAddOne(from string) {
-	//fmt.Printf("resultsWaitGroup adding 1 from %s\n", from)
-	p.resultsWaitGroup.Add(1)
-}
-
-func (p *WorkerPool) resultsWGDone(from string) {
-	//fmt.Printf("resultsWaitGroup calling Done from %s\n", from)
-	p.resultsWaitGroup.Done()
-}
-
-func (p *WorkerPool) resultsWGWait() {
-	//fmt.Printf("resultsWaitGroup calling Wait\n")
-	p.resultsWaitGroup.Wait()
+	maxWorkers             int
+	taskQueue              chan *Job
+	workerQueue            chan *Job
+	stoppedChan            chan struct{}
+	stopSignal             chan struct{}
+	jobProcessingQueue     chan *Job
+	jobProcessingWaitGroup sync.WaitGroup
+	results                []Result
+	resultsLock            sync.Mutex
+	waitingQueue           deque.Deque[*Job]
+	stopLock               sync.Mutex
+	stopOnce               sync.Once
+	stopped                bool
+	waiting                int32
+	wait                   bool
 }
 
 // Size returns the maximum number of concurrent workers.
@@ -154,10 +180,7 @@ func (p *WorkerPool) Stopped() bool {
 // indefinitely.
 func (p *WorkerPool) Submit(job *Job) {
 	if job != nil {
-		//p.resultsWaitGroup.Add(1)
-		if !job.ignoreResult {
-			p.resultsWGAddOne(fmt.Sprintf("Submit %v\n", job))
-		}
+		job.setWaitGroup(&p.jobProcessingWaitGroup)
 		p.taskQueue <- job
 	}
 }
@@ -167,10 +190,7 @@ func (p *WorkerPool) SubmitWait(job *Job) {
 	if job == nil {
 		return
 	}
-	if !job.ignoreResult {
-		//p.resultsWaitGroup.Add(1)
-		p.resultsWGAddOne(fmt.Sprintf("SubmitWait %v\n", job))
-	}
+	job.setWaitGroup(&p.jobProcessingWaitGroup)
 	doneChan := make(chan struct{})
 	f := job.Function
 	job.Function = func() (any, error) {
@@ -208,13 +228,17 @@ func (p *WorkerPool) Pause(ctx context.Context) {
 	ready := new(sync.WaitGroup)
 	ready.Add(p.maxWorkers)
 	for i := 0; i < p.maxWorkers; i++ {
+		_i := i
+		_ready := ready
+		_ctx := ctx
+		_stopSignal := p.stopSignal
 		p.Submit(&Job{
-			Name: "pause",
+			Name: "pause " + strconv.Itoa(_i),
 			Function: func() (any, error) {
-				ready.Done()
+				_ready.Done()
 				select {
-				case <-ctx.Done():
-				case <-p.stopSignal:
+				case <-_ctx.Done():
+				case <-_stopSignal: //.stopSignal:
 				}
 				return nil, nil
 			},
@@ -225,23 +249,17 @@ func (p *WorkerPool) Pause(ctx context.Context) {
 	ready.Wait()
 }
 
+// Results returns Job results.
 func (p *WorkerPool) Results() []Result {
 	return p.results
 }
 
-func (p *WorkerPool) processResults() {
-	for result := range p.resultsChan {
-		if !result.ignoreResult {
-			p.results = append(p.results, result)
-			p.resultsWGDone(fmt.Sprintf("processResults for job : %v\n", result))
-		}
-	}
-	fmt.Println("processResults() -> DONE")
-}
-
 // dispatch sends the next queued task to an available worker.
 func (p *WorkerPool) dispatch() {
-	defer close(p.stoppedChan)
+	defer func() {
+		close(p.stoppedChan)
+		close(p.jobProcessingQueue)
+	}()
 	timeout := time.NewTimer(idleTimeout)
 	var workerCount int
 	var idle bool
@@ -261,22 +279,22 @@ Loop:
 		}
 
 		select {
-		case task, ok := <-p.taskQueue:
+		case job, ok := <-p.taskQueue:
 			if !ok {
 				break Loop
 			}
 			// Got a task to do.
 			select {
-			case p.workerQueue <- task:
+			case p.workerQueue <- job:
 			default:
 				// Create a new worker, if not at max.
 				if workerCount < p.maxWorkers {
 					wg.Add(1)
-					go worker(task, p.workerQueue, p.resultsChan, &wg)
+					go worker(job, p.workerQueue, p.jobProcessingQueue, &wg)
 					workerCount++
 				} else {
 					// Enqueue task to be executed by next available worker.
-					p.waitingQueue.PushBack(task)
+					p.waitingQueue.PushBack(job)
 					atomic.StoreInt32(&p.waiting, int32(p.waitingQueue.Len()))
 				}
 			}
@@ -305,26 +323,39 @@ Loop:
 		workerCount--
 	}
 	wg.Wait()
+
 	timeout.Stop()
-	fmt.Println("closing resultsChan")
-	close(p.resultsChan)
+}
+
+// processJobResults takes jobs from the jobProcessingQueue and transforms the
+// results into a Result object, which is then pushed to the `results` slice.
+func (p *WorkerPool) processJobResults() {
+	for job := range p.jobProcessingQueue {
+		if job.ignoreResult {
+			continue
+		}
+		p.resultsLock.Lock()
+		p.results = append(p.results, Result{
+			Name:     job.Name,
+			Data:     job.data,
+			Error:    job.error,
+			Duration: job.duration,
+		})
+		p.resultsLock.Unlock()
+	}
+	p.jobProcessingWaitGroup.Done()
 }
 
 // worker executes tasks and stops when it receives a nil task.
-func worker(job *Job, workerQueue chan *Job, resultsChan chan Result, wg *sync.WaitGroup) {
+func worker(job *Job, workerQueue chan *Job, jobProcessingQueue chan *Job, wg *sync.WaitGroup) {
 	for job != nil {
-		job.startedAt = time.Now()
-		result, err := job.Function()
-		duration := time.Since(job.startedAt)
-
-		resultsChan <- Result{
-			Name:         job.Name,
-			Data:         result,
-			Error:        err,
-			Duration:     duration,
-			ignoreResult: job.ignoreResult,
-		}
-
+		job.add()
+		start := time.Now()
+		job.data, job.error = job.Function()
+		job.duration = time.Since(start)
+		jobProcessingQueue <- job
+		job.done()
+		// Get another job
 		job = <-workerQueue
 	}
 	wg.Done()
@@ -348,13 +379,8 @@ func (p *WorkerPool) stop(wait bool) {
 		// Close task queue and wait for currently running tasks to finish.
 		close(p.taskQueue)
 	})
-	fmt.Println("stop() -> about to block waiting for `<- p.stoppedChan`")
 	<-p.stoppedChan
-	if p.wait {
-		fmt.Println("stop() -> about to block waiting for resultsWaitGroup.Wait()");
-		p.resultsWGWait()
-	}
-	fmt.Println("stop() -> DONE")
+	p.jobProcessingWaitGroup.Wait()
 }
 
 // processWaitingQueue puts new tasks onto the waiting queue, and removes

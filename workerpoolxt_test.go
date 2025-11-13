@@ -3,7 +3,6 @@ package workerpoolxt
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -31,9 +30,8 @@ func TestResults(t *testing.T) {
 
 	wp.StopWait()
 	res := wp.Results()
-	fmt.Printf("%v\n", res)
 	if len(res) != jobs {
-		t.Fatalf("Expected 2 results got %d\n", len(res))
+		t.Fatalf("Expected %d results got %d\n", jobs, len(res))
 	}
 }
 
@@ -64,9 +62,31 @@ func TestResultsPauseJobsAreIgnored(t *testing.T) {
 	wp.StopWait()
 
 	res := wp.Results()
-	fmt.Printf("%v\n", res)
 	if len(res) != 2 {
 		t.Fatalf("Expected 2 results got %d\n", len(res))
+	}
+}
+
+// go test -run TestLongRunningJobsHaveResultsProcessed -race
+func TestLongRunningJobsHaveResultsProcessed(t *testing.T) {
+	wp := New(5)
+	jobs := 10
+
+	for i := 0; i < jobs; i++ {
+		wp.Submit(&Job{
+			Name: "Job " + strconv.Itoa(i),
+			Function: func() (any, error) {
+				time.Sleep(1 * time.Second)
+				return true, nil
+			},
+		})
+	}
+
+	wp.StopWait()
+
+	num_results := len(wp.Results())
+	if num_results != jobs {
+		t.Fatalf("Expected %d results, got %d\n", jobs, num_results)
 	}
 }
 
@@ -165,9 +185,7 @@ func TestReuseWorkers(t *testing.T) {
 	// Cause worker to be created, and available for reuse before next task.
 	for i := 0; i < 10; i++ {
 		wp.Submit(&Job{Name: "TestReuseWorkers_" + strconv.Itoa(i), Function: func() (any, error) {
-			//fmt.Printf("Job %d waiting to be released\n", i)
 			<-release
-			//fmt.Printf("    Job %d has been released\n", i)
 			return nil, nil
 		}})
 		release <- struct{}{}
@@ -235,23 +253,24 @@ func TestStop(t *testing.T) {
 	if wp.Stopped() {
 		t.Fatal("pool should not be stopped")
 	}
-	fmt.Println("line 238")
+
 	wp.Stop()
+
 	if anyReady(wp) {
 		t.Fatal("should have zero workers after stop")
 	}
-	fmt.Println("line 243")
+
 	if !wp.Stopped() {
 		t.Fatal("pool should be stopped")
 	}
 
 	// Start workers, and have them all wait on a channel before completing.
-	fmt.Println("~~ NEW WP INSTANCE ~~ line 249")
+
 	wp = New(5)
-	fmt.Println("line 250")
+
 	release := make(chan struct{})
 	finished := make(chan struct{}, max)
-	fmt.Println("line 253")
+
 	for i := 0; i < max; i++ {
 		wp.Submit(&Job{
 			Name: "Test Stop",
@@ -262,16 +281,15 @@ func TestStop(t *testing.T) {
 			},
 		})
 	}
-	fmt.Println("line 264")
+
 	// Call Stop() and see that only the already running tasks were completed.
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		close(release)
-		fmt.Println("line 269")
 	}()
-	fmt.Println("line 270")
+
 	wp.Stop()
-	fmt.Println("line 272")
+
 	var count int
 Count:
 	for count < max {
@@ -285,7 +303,6 @@ Count:
 	if count > 5 {
 		t.Fatal("Should not have completed any queued tasks, did", count)
 	}
-	fmt.Println("line 285")
 	// Check that calling Stop() again is OK.
 	wp.Stop()
 }
@@ -467,6 +484,7 @@ func TestStopRace(t *testing.T) {
 
 // Run this test with race detector to test that using WaitingQueueSize has no
 // race condition
+// `go test -run TestWaitingQueueSizeRace -race`
 func TestWaitingQueueSizeRace(t *testing.T) {
 	defer goleak.VerifyNone(t)
 	const (
@@ -534,7 +552,6 @@ func TestPause(t *testing.T) {
 		},
 	})
 
-	fmt.Printf(">> calling pause\n")
 	wp.Pause(ctx)
 
 	// Check that Pause waits for all previously submitted tasks to run.
@@ -653,12 +670,10 @@ func TestPause(t *testing.T) {
 			return nil, nil
 		},
 	})
-	fmt.Printf("\n\n\nline 651\n\n\n")
+
 	stopDone := make(chan struct{})
 	go func() {
-		fmt.Println(">>from goroutine before calling wp.StopWait()");
 		wp.StopWait()
-		fmt.Printf(">>from goroutine wp.StopWait() then close(stopDone) after stop wait but before close(stopDone)\n")
 		close(stopDone)
 	}()
 
@@ -740,18 +755,17 @@ func countReady(w *WorkerPool) int {
 	// Try to stop max workers.
 	timeout := time.After(100 * time.Millisecond)
 	release := make(chan struct{})
-	wait := &Job{
-		Name: "countReady",
-		Function: func() (any, error) {
-			<-release
-			return nil, nil
-		},
-		ignoreResult: true,
-	}
 	var readyCount int
 	for i := 0; i < max; i++ {
 		select {
-		case w.workerQueue <- wait:
+		case w.workerQueue <- &Job{
+			Name: "countReady",
+			Function: func() (any, error) {
+				<-release
+				return nil, nil
+			},
+			ignoreResult: true,
+		}:
 			readyCount++
 		case <-timeout:
 			i = max
