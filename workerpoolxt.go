@@ -100,11 +100,11 @@ func New(maxWorkers int) *WorkerPool {
 		results:            []Result{},
 	}
 
-	// Start the task dispatcher.
-	go pool.dispatch()
 	// Start the job results processor
 	pool.jobProcessingWaitGroup.Add(1)
 	go pool.processJobResults()
+	// Start the task dispatcher.
+	go pool.dispatch()
 
 	return pool
 }
@@ -120,7 +120,6 @@ type WorkerPool struct {
 	jobProcessingQueue     chan *Job
 	jobProcessingWaitGroup sync.WaitGroup
 	results                []Result
-	resultsLock            sync.Mutex
 	waitingQueue           deque.Deque[*Job]
 	stopLock               sync.Mutex
 	stopOnce               sync.Once
@@ -330,14 +329,12 @@ func (p *WorkerPool) processJobResults() {
 		if job.ignoreResult {
 			continue
 		}
-		p.resultsLock.Lock()
 		p.results = append(p.results, Result{
 			Name:     job.Name,
 			Data:     job.data,
 			Error:    job.error,
 			Duration: job.duration,
 		})
-		p.resultsLock.Unlock()
 	}
 	p.jobProcessingWaitGroup.Done()
 }
