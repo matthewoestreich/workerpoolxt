@@ -11,32 +11,37 @@ import (
 
 // New creates a new workerpoolxt
 func New(size int) *WorkerPoolXT {
-	return &WorkerPoolXT{
-		WorkerPool: workerpool.New(size),
-		results:    []*Result{},
-	}
+	return WithWorkerPool(workerpool.New(size))
 }
 
 // WithWorkerPool creates a new workerpoolxt using an existing WorkerPool
 func WithWorkerPool(workerpool *workerpool.WorkerPool) *WorkerPoolXT {
-	return &WorkerPoolXT{
-		WorkerPool: workerpool,
-		results:    []*Result{},
+	wp := &WorkerPoolXT{
+		WorkerPool:       workerpool,
+		processJobsQueue: make(chan *Job),
+		results:          []*Result{},
+		resultsWaitGroup: sync.WaitGroup{},
 	}
+	wp.resultsWaitGroup.Add(1)
+	go wp.processResults()
+	return wp
 }
 
 // WorkerPoolXT wraps workerpool
 type WorkerPoolXT struct {
 	*workerpool.WorkerPool
-	resultsMutex sync.Mutex
-	results      []*Result
-	once         sync.Once
+	resultsMutex     sync.Mutex
+	results          []*Result
+	processJobsQueue chan *Job
+	resultsWaitGroup sync.WaitGroup
+	once             sync.Once
 }
 
 // Results gets results, if any exist.
 // You should call |.StopWait()| first.
 // Preferrably you should use |allResult := .StopWaitXT()|
 func (wp *WorkerPoolXT) Results() []*Result {
+	fmt.Println("Results() -> called")
 	return wp.results
 }
 
@@ -46,31 +51,26 @@ func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 		return errors.New("job.Function is nil")
 	}
 
+	wp.resultsWaitGroup.Add(1)
+
 	submitErr := wp.trySubmit(func() {
 		defer recoverFromJobPanic(wp, job)
-
 		job.startedAt = time.Now()
-		data, err := job.Function()
-		duration := time.Since(job.startedAt)
-
-		wp.appendResult(&Result{
-			Name:     job.Name,
-			Error:    err,
-			Duration: duration,
-			Data:     data,
-		})
+		job.data, job.error = job.Function()
+		job.duration = time.Since(job.startedAt)
+		wp.processJobsQueue <- job
+		wp.resultsWaitGroup.Done()
 	})
 
 	if submitErr != nil {
-		wp.appendResult(&Result{
-			Name: job.Name,
-			Error: PanicRecoveryError{
-				Job:     job,
-				Message: fmt.Sprintf("failure during job submission: %v", submitErr),
-			},
-			Duration: 0,
-			Data:     nil,
-		})
+		job.duration = 0
+		job.data = nil
+		job.error = PanicRecoveryError{
+			Job:     job,
+			Message: fmt.Sprintf("failure during job submission: %v", submitErr),
+		}
+		wp.processJobsQueue <- job
+		wp.resultsWaitGroup.Done()
 	}
 
 	return nil
@@ -80,8 +80,22 @@ func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 func (wp *WorkerPoolXT) StopWaitXT() []*Result {
 	wp.once.Do(func() {
 		wp.StopWait()
+		close(wp.processJobsQueue)
+		wp.resultsWaitGroup.Wait()
 	})
-	return wp.results
+	return wp.Results()
+}
+
+func (p *WorkerPoolXT) processResults() {
+	for job := range p.processJobsQueue {
+		p.appendResult(&Result{
+			Name:     job.Name,
+			Data:     job.data,
+			Duration: job.duration,
+			Error:    job.error,
+		})
+	}
+	p.resultsWaitGroup.Done()
 }
 
 // Gives us an error if there is a panic during job submission.
@@ -119,7 +133,14 @@ func (r Result) String() string {
 type Job struct {
 	Name      string
 	Function  func() (any, error)
+	data      any
+	error     error
+	duration  time.Duration
 	startedAt time.Time
+}
+
+func (j *Job) String() string {
+	return fmt.Sprintf("Job: %s | Data: %v | Err: %v | Took: %s", j.Name, j.data, j.error, j.duration)
 }
 
 // PanicRecoveryError is what gets thrown during job panic recovery
@@ -135,14 +156,13 @@ func (e PanicRecoveryError) Error() string {
 // Helper function to recover from a panic within a job
 func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 	if r := recover(); r != nil {
-		wp.appendResult(&Result{
-			Name: j.Name,
-			Error: PanicRecoveryError{
-				Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
-				Job:     j,
-			},
-			Data:     nil,
-			Duration: time.Since(j.startedAt),
-		})
+		j.duration = time.Since(j.startedAt)
+		j.data = nil
+		j.error = PanicRecoveryError{
+			Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
+			Job:     j,
+		}
+		wp.processJobsQueue <- j
+		wp.resultsWaitGroup.Done()
 	}
 }

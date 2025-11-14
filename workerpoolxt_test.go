@@ -323,24 +323,6 @@ func TestJobRetry(t *testing.T) {
 	}
 }
 
-func TestNativeStopWait(t *testing.T) {
-	wp := New(4)
-
-	wp.SubmitXT(&Job{
-		Name: "native-stopwait",
-		Function: func() (any, error) {
-			time.Sleep(1 * time.Second)
-			return true, nil
-		},
-	})
-
-	wp.StopWait()
-	allResults := wp.Results()
-	if len(allResults) != 1 {
-		t.Fatal("expected 1 result")
-	}
-}
-
 func TestCallingResultsBeforeStopWait(t *testing.T) {
 	wp := New(3)
 	premature := wp.Results()
@@ -353,10 +335,10 @@ func TestCallingResultsBeforeStopWait(t *testing.T) {
 			return true, nil
 		},
 	})
-	wp.StopWait()
+	wp.StopWaitXT()
 	r := wp.Results()
 	if len(r) != 1 {
-		t.Fatal("expected 1 result")
+		t.Fatalf("expected 1 result got %v\n", len(r))
 	}
 }
 
@@ -369,7 +351,6 @@ func TestCallingStopWaitXTMoreThanOnce(t *testing.T) {
 		},
 	})
 
-	/*firstResults :=*/
 	wp.StopWaitXT()
 
 	wp.SubmitXT(&Job{

@@ -13,7 +13,9 @@ We wrap the func(s) that get passed to `workerpool`, which we call "jobs". Job r
 
 You have the ability to give each job a name. You can access job results, job runtime duration, or any job errors within job results. In `gammazero/workerpool` this is not possible - you do not have the ability to get any sort of result or error data from a "job".
 
-**You still retain access to all `gammazero/workerpool` members. See [`Native Member Access`](#native-member-access) for more.**
+## Important
+
+You still retain access to all `gammazero/workerpool` members, but **you must use `pool.StopWaitXT()` if you submit jobs via `pool.SubmitXT(..)`!**
 
 ## Generics
 
@@ -122,25 +124,4 @@ The point is: you have full control over every job.
     return result, nil
   },
 }
-```
-
-# Native Member Access
-
-Using native `gammazero/workerpool` members with `workerpoolxt`.
-
-## StopWait
-
-If you would like to use the native `.StopWait()` instead of `allResults := .StopWaitXT()`, here is how you can still gain access to job results.
-
-```go
-wp := wpxt.New(4)
-
-//
-// Submitting a bunch of jobs here
-//
-
-wp.StopWait()
-
-allResults := wp.Results()
-// Do something with |allResults|
 ```
