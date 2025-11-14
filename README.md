@@ -15,6 +15,8 @@ You have the ability to give each job a name. You can access job results, job ru
 
 ## Important
 
+**Breaking changes in `v1.5.0`!
+
 You still retain access to all `gammazero/workerpool` members, but **you must use `pool.StopWaitXT()` if you submit jobs via `pool.SubmitXT(..)`!**
 
 ## Generics

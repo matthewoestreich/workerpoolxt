@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gammazero/workerpool"
@@ -30,6 +31,7 @@ func WithWorkerPool(workerpool *workerpool.WorkerPool) *WorkerPoolXT {
 // WorkerPoolXT wraps workerpool
 type WorkerPoolXT struct {
 	*workerpool.WorkerPool
+	stopped          atomic.Bool
 	resultsMutex     sync.Mutex
 	results          []*Result
 	processJobsQueue chan *Job
@@ -41,12 +43,14 @@ type WorkerPoolXT struct {
 // You should call |.StopWait()| first.
 // Preferrably you should use |allResult := .StopWaitXT()|
 func (wp *WorkerPoolXT) Results() []*Result {
-	fmt.Println("Results() -> called")
 	return wp.results
 }
 
 // SubmitXT submits a Job to workerpool
 func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
+	if wp.stopped.Load() {
+		return errors.New("pool is stopped! cannot reuse a stopped pool")
+	}
 	if job.Function == nil {
 		return errors.New("job.Function is nil")
 	}
@@ -78,6 +82,10 @@ func (wp *WorkerPoolXT) SubmitXT(job *Job) error {
 
 // StopWaitXT blocks main thread and waits for all jobs
 func (wp *WorkerPoolXT) StopWaitXT() []*Result {
+	if wp.stopped.Load() {
+		return wp.Results()
+	}
+	wp.stopped.Store(true)
 	wp.once.Do(func() {
 		wp.StopWait()
 		close(wp.processJobsQueue)
@@ -155,6 +163,9 @@ func (e PanicRecoveryError) Error() string {
 
 // Helper function to recover from a panic within a job
 func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
+	if wp.stopped.Load() {
+		return
+	}
 	if r := recover(); r != nil {
 		j.duration = time.Since(j.startedAt)
 		j.data = nil
