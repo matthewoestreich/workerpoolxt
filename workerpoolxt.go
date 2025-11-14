@@ -284,8 +284,8 @@ func (p *WorkerPool) processJobResults() {
 // worker executes tasks and stops when it receives a nil task.
 func worker(job *Job, workerQueue chan *Job, jobProcessingQueue chan *Job, jobProcessingWaitGroup *sync.WaitGroup, wg *sync.WaitGroup) {
 	for job != nil {
-		start := time.Now()
 		jobProcessingWaitGroup.Add(1)
+		start := time.Now()
 		job.data, job.error = job.Function()
 		job.duration = time.Since(start)
 		jobProcessingQueue <- job
