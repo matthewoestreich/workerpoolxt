@@ -200,6 +200,45 @@ func TestReuseWorkers(t *testing.T) {
 	}
 }
 
+func TestResultsRace(t *testing.T) {
+	wp := New(5)
+	jobs := 50
+
+	// Start a go routine that does nothing but read results
+	killResultsReader := make(chan struct{})
+	go func() {
+	Loop:
+		for {
+			select {
+			case _, ok := <-killResultsReader:
+				if !ok {
+					break Loop
+				}
+			default:
+				wp.Results()
+			}
+		}
+	}()
+
+	for i := 0; i < jobs; i++ {
+		wp.Submit(&Job {
+			Name: "Job " + strconv.Itoa(i),
+			Function: func() (any, error) {
+				time.Sleep(500 * time.Millisecond)
+				return "Job " + strconv.Itoa(i), nil
+			},
+		})
+	}
+
+	wp.StopWait()
+	close(killResultsReader)
+
+	resLen := len(wp.Results())
+	if resLen != jobs {
+		t.Fatalf("Expected %d results, got %d\n", jobs, resLen)
+	}
+}
+
 func TestWorkerTimeout(t *testing.T) {
 	defer goleak.VerifyNone(t)
 

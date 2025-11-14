@@ -16,69 +16,6 @@ const (
 	idleTimeout = 2 * time.Second
 )
 
-type Job struct {
-	Name         string
-	Function     func() (any, error)
-	wg           *sync.WaitGroup
-	hasAdded     bool
-	ignoreResult bool
-	error        error
-	data         any
-	duration     time.Duration
-}
-
-func (j *Job) setWaitGroup(wg *sync.WaitGroup) {
-	j.wg = wg
-	j.hasAdded = false
-}
-
-// add will increment the `Job.wg` WaitGroup by 1 if all of the following are true:
-// - The WaitGroup exists (not nil)
-// - Job.hasAdded == false
-// - Job.ignoreResult == false
-// This also sets the `Job.hasAdded` flag to true.
-func (j *Job) add() {
-	if j.wg == nil || j.hasAdded || j.ignoreResult {
-		return
-	}
-	j.wg.Add(1)
-	j.hasAdded = true
-}
-
-// done calls `Job.wg.Done()` if `Job.wg` is not nil and `Job.hasAdded` is false.
-func (j *Job) done() {
-	if j.wg != nil && j.hasAdded {
-		j.wg.Done()
-	}
-}
-
-func (j *Job) String() string {
-	return fmt.Sprintf(`Job {
-	Name: "%s",
-	Data: %v,
-	Error: %v,
-	Duration: %s,
-}
-`, j.Name, j.data, j.error, j.duration)
-}
-
-type Result struct {
-	Error    error
-	Data     any
-	Name     string
-	Duration time.Duration
-}
-
-func (r Result) String() string {
-	return fmt.Sprintf(`Job {
-	Name: "%s",
-	Data: %v,
-	Error: %v,
-	Duration: %s,
-}
-`, r.Name, r.Data, r.Error, r.Duration)
-}
-
 // New creates and starts a pool of worker goroutines.
 //
 // The maxWorkers parameter specifies the maximum number of workers that can
@@ -91,13 +28,14 @@ func New(maxWorkers int) *WorkerPool {
 	}
 
 	pool := &WorkerPool{
-		maxWorkers:         maxWorkers,
-		taskQueue:          make(chan *Job),
-		workerQueue:        make(chan *Job),
-		stopSignal:         make(chan struct{}),
-		stoppedChan:        make(chan struct{}),
-		jobProcessingQueue: make(chan *Job, maxWorkers*2),
-		results:            []Result{},
+		maxWorkers:             maxWorkers,
+		taskQueue:              make(chan *Job),
+		workerQueue:            make(chan *Job),
+		stopSignal:             make(chan struct{}),
+		stoppedChan:            make(chan struct{}),
+		jobProcessingQueue:     make(chan *Job),
+		jobProcessingWaitGroup: sync.WaitGroup{},
+		results:                []Result{},
 	}
 
 	// Start the job results processor
@@ -120,6 +58,7 @@ type WorkerPool struct {
 	jobProcessingQueue     chan *Job
 	jobProcessingWaitGroup sync.WaitGroup
 	results                []Result
+	resultsLock            sync.Mutex
 	waitingQueue           deque.Deque[*Job]
 	stopLock               sync.Mutex
 	stopOnce               sync.Once
@@ -179,7 +118,6 @@ func (p *WorkerPool) Stopped() bool {
 // indefinitely.
 func (p *WorkerPool) Submit(job *Job) {
 	if job != nil {
-		job.setWaitGroup(&p.jobProcessingWaitGroup)
 		p.taskQueue <- job
 	}
 }
@@ -189,7 +127,6 @@ func (p *WorkerPool) SubmitWait(job *Job) {
 	if job == nil {
 		return
 	}
-	job.setWaitGroup(&p.jobProcessingWaitGroup)
 	doneChan := make(chan struct{})
 	f := job.Function
 	job.Function = func() (any, error) {
@@ -246,7 +183,10 @@ func (p *WorkerPool) Pause(ctx context.Context) {
 
 // Results returns Job results.
 func (p *WorkerPool) Results() []Result {
-	return p.results
+	p.resultsLock.Lock()
+	r := p.results
+	p.resultsLock.Unlock()
+	return r
 }
 
 // dispatch sends the next queued task to an available worker.
@@ -285,7 +225,7 @@ Loop:
 				// Create a new worker, if not at max.
 				if workerCount < p.maxWorkers {
 					wg.Add(1)
-					go worker(job, p.workerQueue, p.jobProcessingQueue, &wg)
+					go worker(job, p.workerQueue, p.jobProcessingQueue, &p.jobProcessingWaitGroup, &wg)
 					workerCount++
 				} else {
 					// Enqueue task to be executed by next available worker.
@@ -329,25 +269,27 @@ func (p *WorkerPool) processJobResults() {
 		if job.ignoreResult {
 			continue
 		}
+		p.resultsLock.Lock()
 		p.results = append(p.results, Result{
 			Name:     job.Name,
 			Data:     job.data,
 			Error:    job.error,
 			Duration: job.duration,
 		})
+		p.resultsLock.Unlock()
 	}
 	p.jobProcessingWaitGroup.Done()
 }
 
 // worker executes tasks and stops when it receives a nil task.
-func worker(job *Job, workerQueue chan *Job, jobProcessingQueue chan *Job, wg *sync.WaitGroup) {
+func worker(job *Job, workerQueue chan *Job, jobProcessingQueue chan *Job, jobProcessingWaitGroup *sync.WaitGroup, wg *sync.WaitGroup) {
 	for job != nil {
-		job.add()
 		start := time.Now()
+		jobProcessingWaitGroup.Add(1)
 		job.data, job.error = job.Function()
 		job.duration = time.Since(start)
 		jobProcessingQueue <- job
-		job.done()
+		jobProcessingWaitGroup.Done()
 		// Get another job
 		job = <-workerQueue
 	}
@@ -413,4 +355,44 @@ func (p *WorkerPool) runQueuedTasks() {
 		p.workerQueue <- p.waitingQueue.PopFront()
 		atomic.StoreInt32(&p.waiting, int32(p.waitingQueue.Len()))
 	}
+}
+
+/*************************** Job ************************************************/
+
+type Job struct {
+	Name         string
+	Function     func() (any, error)
+	ignoreResult bool
+	error        error
+	data         any
+	duration     time.Duration
+}
+
+func (j *Job) String() string {
+	return fmt.Sprintf(`Job {
+	Name: "%s",
+	Data: %v,
+	Error: %v,
+	Duration: %s,
+}
+`, j.Name, j.data, j.error, j.duration)
+}
+
+/*************************** Result ********************************************/
+
+type Result struct {
+	Error    error
+	Data     any
+	Name     string
+	Duration time.Duration
+}
+
+func (r Result) String() string {
+	return fmt.Sprintf(`Job {
+	Name: "%s",
+	Data: %v,
+	Error: %v,
+	Duration: %s,
+}
+`, r.Name, r.Data, r.Error, r.Duration)
 }
