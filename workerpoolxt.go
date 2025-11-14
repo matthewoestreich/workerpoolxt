@@ -85,9 +85,9 @@ func (wp *WorkerPoolXT) StopWaitXT() []*Result {
 	if wp.stopped.Load() {
 		return wp.Results()
 	}
-	wp.stopped.Store(true)
 	wp.once.Do(func() {
 		wp.StopWait()
+		wp.stopped.Store(true)
 		close(wp.processJobsQueue)
 		wp.resultsWaitGroup.Wait()
 	})
@@ -163,9 +163,6 @@ func (e PanicRecoveryError) Error() string {
 
 // Helper function to recover from a panic within a job
 func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
-	if wp.stopped.Load() {
-		return
-	}
 	if r := recover(); r != nil {
 		j.duration = time.Since(j.startedAt)
 		j.data = nil
@@ -173,7 +170,9 @@ func recoverFromJobPanic(wp *WorkerPoolXT, j *Job) {
 			Message: fmt.Sprintf("Job recovered from panic \"%v\"", r),
 			Job:     j,
 		}
-		wp.processJobsQueue <- j
+		if !wp.stopped.Load() {
+			wp.processJobsQueue <- j
+		}
 		wp.resultsWaitGroup.Done()
 	}
 }
