@@ -9,7 +9,15 @@
 
 ## Synopsis
 
-Use `workerpoolxt` with generics. As far as functionality, everything else remains the same. See the README at the root of the repo for extended documentation.
+We wrap the func(s) that get passed to `workerpool`, which we call "jobs". Job results will be returned to you after all jobs have completed.
+
+You have the ability to give each job a name. You can access job results, job runtime duration, or any job errors within job results. In `gammazero/workerpool` this is not possible - you do not have the ability to get any sort of result or error data from a "job".
+
+## Important
+
+**Breaking changes in `v1.5.0`!
+
+You still retain access to all `gammazero/workerpool` members, but **you must use `pool.StopWaitXT()` if you submit jobs via `pool.SubmitXT(..)`!**
 
 ## Import
 
